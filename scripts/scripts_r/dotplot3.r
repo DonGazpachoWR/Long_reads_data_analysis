@@ -14,7 +14,7 @@ label_10_pow <- function(x) {
         parse(text = paste0("10^", x))
 }
 
-filtrar_y_transformar <- function(df, seq, filtro=1) {
+filtrar_y_transformar <- function(df, seq) {
         
         if (seq == "masseq"){
                 df_filtered <- df[which(
@@ -33,66 +33,11 @@ filtrar_y_transformar <- function(df, seq, filtro=1) {
                 df_filtered <- df[which(
                         df[, "associated_transcript"] != "novel" &
                                 df[, "structural_category"] == "full-splice_match" ) , ]
-                # filtro expresion mínima
-                # Filtro = 0 no hace nada, coge todo
-                # Filtro = 1 expresion en al menos una de las dos condiciones predictoras y en todas las observadas
-                # Filtro = 2 expresión simultanea en ambas condiciones predictoras y observadas
-                # Filtro = 3 expresion simultanea en condiciones predictoras y observadas
-                # Debe haber al menos 1 lectura por
-                if (filtro == 1){
                 df_filtered <-df_filtered[which(
-                                df_filtered[, "B100"]  > 0 & 
-                                df_filtered[, "K100"] > 0 &
-                                df_filtered[, "B20"]  > 0 &
-                                df_filtered[, "B80"]  > 0 ) , ] }
-                else if (filtro == 2) {
-                        df_filtered <-df_filtered[which(
                                 df_filtered[, "B100"]  > 0 & 
                                 df_filtered[, "K100"] > 0 &
                                 df_filtered[, "B20"]  > 0 &
                                 df_filtered[, "B80"]  > 0 ) , ] 
-                }
-                else if (filtro == 3){
-                        df_filtered <-df_filtered[which(
-                                df_filtered[, "B100"]  > 0 & 
-                                df_filtered[, "K100"] > 0 &
-                                df_filtered[, "B20"]  > 0 &
-                                df_filtered[, "B80"]  > 0 ) , ] 
-                        
-                }
-                
-                # Expression:  At least 1 read per condition
-                n <- 1 
-                # Expression:  At least n reads per n samples per condition
-                n <-  ncol(df_filtered[, "B100"])
-                # Expression in at least 1 predictor condition
-                
-                df_filtered <-df_filtered[which(
-                        df_filtered[, "B100"]  >= n || 
-                                df_filtered[, "K100"] >= n ) , ] 
-                # Expression in all predictors and observed conditions
-                df_filtered <-df_filtered[which(
-                        df_filtered[, "B100"]  >= n & 
-                                df_filtered[, "K100"] >= n &
-                                df_filtered[, "B20"]  >= n &
-                                df_filtered[, "B80"]  >= n ) , ] 
-                
-                ############################################################
-                # Expression:  At least 1 read per sample per condition
-                
-                # Expression in at least 1 predictor condition
-                
-                df_filtered <-df_filtered[which(
-                        
-                        apply(df_filtered[, "B100"]  > 0, 1, all) || 
-                        apply(df_filtered[, "K100"]  > 0, 1, all) ) , ] 
-                # Expression in all predictors and observed conditions
-                df_filtered <-df_filtered[which(
-                        apply(df_filtered[, "B100"]  > 0, 1, all) & 
-                        apply(df_filtered[, "K100"]  > 0, 1, all) &
-                        apply(df_filtered[, "B20"]  > 0, 1, all) &
-                        apply(df_filtered[, "B80"]  > 0, 1, all) ) , ] 
-                
         
                 
         # Transformación logarítmica base 10 con pseudocont 0.01

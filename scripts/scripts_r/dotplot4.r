@@ -6,38 +6,62 @@ library(viridis)
 library(dplyr)
 
 # Rutas base
-ruta   <- "~/Documentos/Conesa_Lab/VSCODE/practica/datos/"
-outdir <- "~/Documentos/Conesa_Lab/VSCODE/practica/graficos/"
+ruta   <- "/home/adrian/Documentos/Conesa_Lab/VSCODE/Long_reads_data_analysis/data/data_expression_matrix"
+outdir <- "/home/adrian/Documentos/Conesa_Lab/VSCODE/Long_reads_data_analysis/output/expression_matrix/graficos"
 
 # Función auxiliar para etiquetas en base 10 en ggplot
 label_10_pow <- function(x) {
     parse(text = paste0("10^", x))
 }
 
-min_exprs_filt <- function(df, seq, filtro = 1){
+min_exprs_filt <- function(df, seq, filtro = 2){
     
-    if (!(filtro %in% c(0,1,2) )) { filtro <- 1}
+    if (!(filtro %in% c(0,1,2,3) )) { filtro <- 2}
     
     if (seq == "masseq"){
         cols1 <- c("K31", "K32", "K33")
-        cols2 <- c("B31", "B32", "B33")  }
+        cols2 <- c("B31", "B32", "B33")
+        cols3 <- c("B20K80_1", "B20K80_2","B20K80_3") 
+        }
     
     else {
         cols1 <- c("K31", "K32", "K33", "K34", "K35")
-        cols2 <- c("B31", "B32", "B33", "B34", "B35")     
+        cols2 <- c("B31", "B32", "B33", "B34", "B35") 
+        cols3 <- c("B20K80_1", "B20K80_2","B20K80_3", "B20K80_4", "B20K80_5") 
+        cols4 <- c("B80K20_1", "B80K20_2","B80K20_3", "B80K20_4", "B80K20_5")
     }
     if (filtro != 0) { # Filtro = 0 no filtering
-        # Filter: At least n reads per m samples per condition
-        if (filtro == 1) { n <- 1; m <- 2}
-        
-        # Filter: At least 1 read per condition
-        else { n <- 1; m <- 1 }
-        
-        # All filters imply expresion in at least one of the two predictor conditions
-        df <-df[which(
-            # rowsums cuenta cuantas columnas cumplen el criterio
-            rowSums(df[, cols1[1:3]] >= n) >= m | 
-            rowSums(df[, cols2[1:3]] >= n) >= m ) , ] 
+        if (filtro %in% c(1,2)){
+            # Filter: At least 1 read per condition
+            if (filtro == 1) { n <- 1; m <- 1 }
+            
+            # Filter: At least n reads per m samples per condition
+            else if (filtro == 2) { n <- 1; m <- 2}
+            
+            # All filters imply expresion in at least one of the two predictor conditions
+            df <-df[which(
+                # rowsums cuenta cuantas columnas cumplen el criterio
+                rowSums(df[, cols1] >= n) >= m | 
+                rowSums(df[, cols2] >= n) >= m ) , ] 
+        }
+        else if (filtro == 3) {
+            if (seq == "masseq"){
+                # rowsums cuenta cuantas columnas cumplen el criterio    
+                df <-df[which(
+                    rowSums(df[, cols1] > 0) > 0 & 
+                    rowSums(df[, cols2] > 0) > 0 &
+                    rowSums(df[, cols3] > 0) > 0) , ] 
+            }
+            else {
+                # rowsums cuenta cuantas columnas cumplen el criterio
+                df <-df[which(
+                    rowSums(df[, cols1] > 0) > 0 & 
+                    rowSums(df[, cols2] > 0) > 0 &
+                    rowSums(df[, cols3] > 0) > 0 &
+                    rowSums(df[, cols4] > 0) > 0 ) , ] 
+                
+            }
+        }
     }
     
     return(df)
@@ -181,79 +205,89 @@ generar_y_guardar_plot <- function(df_data, var_x, var_y, titulo, filename, targ
 
 # Ejecutar con bucles para multiples datos
 
-filtro <- 0
+filtro <- c(0,1,2,3)
 modos       <- c("raw", "qc", "fl", "rq" )
 seqs        <- c("isoseq", "masseq", "ont")
 plataformas <- c("isoseq", "isocall", "bambu", "flair", "isoquant")
 
-lista_resumen <- list()
 
-for (s in seqs) {
-    if (s == "ont"){ plataformas <- c("bambu", "flair", "isoquant")}
-    else { plataformas <- c("isoseq", "isocall", "bambu", "flair", "isoquant")}
-    for (p in plataformas) {
-        for (m in modos) {
-            print(c(s, p, m))
+
+for (fil in filtro){
+    lista_resumen <- list()
+    
+    outdir2 <- paste0(outdir, "_filtro_", fil)
+    if (! dir.exists(outdir2)){
+        dir.create(outdir2)
+    }
+    for (s in seqs) {
+        if (s == "ont"){ plataformas <- c("bambu", "flair", "isoquant")}
+        else { plataformas <- c("isoseq", "isocall", "bambu", "flair", "isoquant")}
+        for (p in plataformas) {
+            for (m in modos) {
+                print(c(s, p, m))
+                
+                dir_destino <- file.path(outdir2, s, p, m)
+                
+                df_proc <- procesar_datos(modo = m, seq = s, plataforma = p, ruta = ruta, filtro = fil)
             
-            dir_destino <- file.path(outdir, s, p, m)
-            
-            df_proc <- procesar_datos(modo = m, seq = s, plataforma = p, ruta = ruta, filtro = filtro)
-        
-            
-            if (!is.null(df_proc) && nrow(df_proc) > 0) {
                 
-                combi_name <- paste(m, s, p, sep = "_")
-                
-                # Plot 1: B20K80
-                nombre1 <- paste(combi_name, "B20K80", sep = "_")
-                titulo1 <- paste(toupper(m), toupper(s), toupper(p), "- B20K80", sep = " ")
-                
-                r2_b20 <- generar_y_guardar_plot(
-                    df_data    = df_proc, 
-                    var_x      = "B20_ex", 
-                    var_y      = "B20", 
-                    titulo     = titulo1, 
-                    filename   = nombre1, 
-                    target_dir = dir_destino
-                )
-                # Guardar registros en la lista
-                lista_resumen[[length(lista_resumen) + 1]] <- data.frame(
-                    tipo_de_seqs        = s,
-                    tipo_de_plataformas = p,
-                    tipo_de_modos       = m,
-                    comparacion         = "B20K80",
-                    r_cuadrado    = round(r2_b20, 4)
-                )
-                
-                # Plot 2: B80K20
-                if (s != "masseq"){
-                    nombre2 <- paste(combi_name, "B80K20", sep = "_")
-                    titulo2 <- paste(toupper(m), toupper(s), toupper(p), "- B80K20", sep = " ")
+                if (!is.null(df_proc) && nrow(df_proc) > 0) {
                     
-                    r2_b80 <- generar_y_guardar_plot(
+                    combi_name <- paste(m, s, p, sep = "_")
+                    
+                    # Plot 1: B20K80
+                    nombre1 <- paste(combi_name, "B20K80", sep = "_")
+                    titulo1 <- paste(toupper(m), toupper(s), toupper(p), "- B20K80", sep = " ")
+                    
+                    r2_b20 <- generar_y_guardar_plot(
                         df_data    = df_proc, 
-                        var_x      = "B80_ex", 
-                        var_y      = "B80", 
-                        titulo     = titulo2, 
-                        filename   = nombre2, 
+                        var_x      = "B20_ex", 
+                        var_y      = "B20", 
+                        titulo     = titulo1, 
+                        filename   = nombre1, 
                         target_dir = dir_destino
                     )
-                    
+                    # Guardar registros en la lista
                     lista_resumen[[length(lista_resumen) + 1]] <- data.frame(
+                        filtro = fil,
                         tipo_de_seqs        = s,
                         tipo_de_plataformas = p,
                         tipo_de_modos       = m,
-                        comparacion         = "B80K20",
-                        r_cuadrado    = round(r2_b80, 4)
+                        comparacion         = "B20K80",
+                        r_cuadrado    = round(r2_b20, 4)
                     )
+                    
+                    # Plot 2: B80K20
+                    if (s != "masseq"){
+                        nombre2 <- paste(combi_name, "B80K20", sep = "_")
+                        titulo2 <- paste(toupper(m), toupper(s), toupper(p), "- B80K20", sep = " ")
+                        
+                        r2_b80 <- generar_y_guardar_plot(
+                            df_data    = df_proc, 
+                            var_x      = "B80_ex", 
+                            var_y      = "B80", 
+                            titulo     = titulo2, 
+                            filename   = nombre2, 
+                            target_dir = dir_destino
+                        )
+                        
+                        lista_resumen[[length(lista_resumen) + 1]] <- data.frame(
+                            filtro = fil,
+                            tipo_de_seqs        = s,
+                            tipo_de_plataformas = p,
+                            tipo_de_modos       = m,
+                            comparacion         = "B80K20",
+                            r_cuadrado    = round(r2_b80, 4)
+                        )
+                    }
                 }
+                else {print("error tras procesar datos")}
             }
-            else {print("error tras procesar datos")}
         }
     }
+    
+    df_resumen <- bind_rows(lista_resumen)
+    
+    ruta_csv <- file.path(outdir2, "_resumen_r_cuadrado.csv")
+    write.csv(df_resumen, file = ruta_csv, row.names = FALSE)
 }
-
-df_resumen <- bind_rows(lista_resumen)
-
-ruta_csv <- file.path(outdir, "resumen_r_cuadrado_filtro1.csv")
-write.csv(df_resumen, file = ruta_csv, row.names = FALSE)
