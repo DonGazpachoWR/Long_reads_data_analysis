@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# submit options
+
+#SBATCH --qos medium
+#SBATCH --mem 200G
+#SBATCH -c 30
+#SBATCH -t 48:00:00
+#SBATCH -o log/log.out
+#SBATCH -e log/erro.out
+
+
+set -eou pipefail
+
+module load anaconda
+source $(conda info --base)/etc/profile.d/conda.sh
+mamba activate isocall
+
+gtf2=/home/adrianbe/practicas/intento1/copia_limpio_anotacion_raton.gtf
+fasta=/home/adrianbe/practicas/intento1/isocall/isoseq/genoma_raton.fa
+
+echo Ejecutando prep isoforms...
+isocall prep-isoforms \
+    --gtf $gtf2 \
+    --output ref_seq.isoforms.gz
+echo Prep isoforms ejecutado con éxito
+
+
+echo Ejecutando bams
+
+set +e
+
+
+for bam in /storage/gge/home_members/adrianbe/practicas/intento1/isocall/isoseq/aligned/*.bam;
+do
+nombre=$(basename $bam)
+
+echo Procesando bam: $nombre...
+
+isocall profile \
+    --reads $bam \
+    --output ${nombre}_sample.gz \
+    --io-threads 8
+
+estado_profile=$?
+
+if [ $estado_profile -eq 0 ]; then
+
+isocall call \
+    --merged-profile  ${nombre}_sample.gz \
+    --known-isoforms ref_seq.isoforms.gz \
+    --reference $fasta \
+    --output-prefix  ${nombre}_merged \
+    --threads $SLURM_CPUS_PER_TASK
+
+estado_call=$?
+
+if [ $estado_call -ne 0 ];then
+
+echo Fallo en isocall call para el archivo $nombre
+fi
+
+else
+echo Fallo en isocall profile para el archivo $nombre
+fi
+
+done
+
+
