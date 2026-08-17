@@ -195,7 +195,6 @@ generar_y_guardar_plot <- function(df_data, var_x, var_y, titulo, filename, targ
 
 # Ejecutar con bucles para multiples datos
 
-filtro <- 1
 modos       <- c("raw", "qc", "fl", "rq" )
 seqs        <- c("isoseq", "masseq", "ont")
 plataformas <- c("isoseq", "isocall", "bambu", "flair", "isoquant")
@@ -206,7 +205,7 @@ for (s in seqs) {
         if (s == "ont"){ plataformas <- c("bambu", "flair", "isoquant")}
         for (p in plataformas) {
                 for (m in modos) {
-                        print(c(s, p, m))
+                        print(c(fil, s, p, m))
                         
                         dir_destino <- file.path(outdir, s, p, m)
                         
