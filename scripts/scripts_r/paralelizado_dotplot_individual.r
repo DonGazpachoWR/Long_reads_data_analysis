@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
     library(ggplot2); library(ggpp); library(ggpointdensity); library(viridis); library(dplyr)
 })
 
-# Función auxiliar para etiquetas en base 10 en ggplot
+# etiquetas en base 10 en ggplot
 label_10_pow <- function(x) {
     parse(text = paste0("10^", x))
 }
@@ -30,10 +30,11 @@ TPM <- function(df, cols){
     return(df)
 }
 
+# cambiar NA a 0
 NA_to_0 <- function(df, cols){
     cols <- unlist(cols, use.names = FALSE)
     
-    # cambiar NA a 0
+    
     df[, cols][is.na(df[, cols])] <- 0
     
     return(df)
@@ -80,7 +81,7 @@ min_exprs_filt <- function(df, seq, filtro = 2, ext){
             # Filter: At least n reads per m samples per condition
             else if (filtro == 2) { n <- 1; m <- 2}
             
-            # All filters imply expresion in at least one of the two predictor conditions
+            # Both filters imply expresion in at least one of the two predictor conditions
             df <-df[which(
                 # rowsums cuenta cuantas columnas cumplen el criterio
                 rowSums(df[, cols$cols1] >= n) >= m | 
@@ -149,9 +150,11 @@ procesar_datos <- function(modo, seq, plataforma, ruta, filtro, ext) {
     # Lectura del archivo (qc, fl o rq)
     df_modo <- read.table(file_data, sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL)
     #df_modo <- read.table(file_data, sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL)
+    n0 <- nrow(df_modo)
     
     # Limpieza reads
     df_modo <- min_exprs_filt(df_modo, seq, filtro, ext)
+    n1 <- nrow(df_modo)
     
     cols <- cols_sel(seq=seq)
     
@@ -191,8 +194,9 @@ procesar_datos <- function(modo, seq, plataforma, ruta, filtro, ext) {
     # Llamar a funcion para limpiar datos
     
     df_f <- isoforms_filt(df_f, seq)
+    n2 <- nrow(df_f)
     
-    return(df_f)
+    return(list(df=df_f, n0=n0, n1=n1, n2=n2))
 }
 
 
@@ -254,19 +258,37 @@ outdir2     <- file.path(outdir, paste0("_", ext, "_filtro_", fil))
 dir_destino <- file.path(outdir2, s, p, m)
 dir.create(dir_destino, recursive = TRUE, showWarnings = FALSE)
 
-df_proc <- tryCatch(procesar_datos(m, s, p, ruta, fil, ext), error = function(e) NULL)
+res <- tryCatch(procesar_datos(m, s, p, ruta, fil, ext), error = function(e) NULL)
+
+df_proc <- res$df
+n0 <- res$n0
+n1 <- res$n1
+n2 <- res$n2
 
 if (!is.null(df_proc) && nrow(df_proc) > 0) {
     combi_name <- paste(m, s, p, sep = "_")
     
     # Plot B20
-    r2_b20 <- generar_y_guardar_plot(df_proc, "B20_ex", "B20", paste(toupper(m), toupper(s), toupper(p), "- B20K80"), paste0(combi_name, "_B20K80"), dir_destino)
+    r2_b20 <- generar_y_guardar_plot(df_data = df_proc, 
+                                     var_x = "B20_ex", 
+                                     var_y = "B20", 
+                                     titulo = toupper(paste(ext, m, s, p, "- B20K80")), 
+                                     filename = paste0(combi_name, "_B20K80"), 
+                                     target_dir = dir_destino
+    )
     
-    cat(paste(ifelse(ext == "class", "counts", "TPM"), fil, s, p, m, "B20K80", round(r2_b20, 4), sep = ","), "\n")
+    cat(paste(ifelse(ext == "class", "counts", "TPM"), fil, s, p, m, "B20K80", round(r2_b20, 4), n0, n1, n2, sep = ","), "\n")
     
     # Plot B80
     if (s != "masseq") {
-        r2_b80 <- generar_y_guardar_plot(df_proc, "B80_ex", "B80", paste(toupper(m), toupper(s), toupper(p), "- B80K20"), paste0(combi_name, "_B80K20"), dir_destino)
-        cat(paste(ifelse(ext == "class", "counts", "TPM"), fil, s, p, m, "B80K20", round(r2_b80, 4), sep = ","), "\n")
+        r2_b80 <- generar_y_guardar_plot(df_data = df_proc, 
+                                         var_x = "B80_ex", 
+                                         var_y = "B80", 
+                                         titulo = toupper(paste(ext, m, s, p, "- B80K20")), 
+                                         filename = paste0(combi_name, "_B80K20"), 
+                                         target_dir = dir_destino
+        )
+        
+        cat(paste(ifelse(ext == "class", "counts", "TPM"), fil, s, p, m, "B80K20", round(r2_b80, 4), n0, n1, n2, sep = ","), "\n")
     }
 }
