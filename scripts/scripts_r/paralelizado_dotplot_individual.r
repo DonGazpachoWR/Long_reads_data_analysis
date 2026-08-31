@@ -104,7 +104,7 @@ TPM <- function(df, cols){
     return(df)
 }
 # WORKFLOW PASO 4. MEDIA RÉPLICAS BIOLÓGICAS + MEDIAS TEÓRICAS
-bio_replicate_mean <- function(df_f, cols, seq) {
+bio_replicate_mean <- function(df_modo, name, cols, seq) {
     
     df_f <- data.frame(
         tr_id = df_modo[, name],
@@ -126,7 +126,7 @@ bio_replicate_mean <- function(df_f, cols, seq) {
     
 }
 
-anotar <- function(df_f, modo, combi, extension) {
+anotar <- function(df_f, df_modo, modo, combi, extension) {
     # Añadir columna transcrito asociado y cateogria estructural 
     if (modo == "raw"){
         file_qc <- file.path(ruta, paste0("default_", combi, extension))  
@@ -204,29 +204,30 @@ procesar_datos <- function(modo, seq, plataforma, ruta, filtro, ext) {
     
     # WORKFLOW PASO 1. LIMPIEZA DE NA
     cols <- cols_sel(seq = seq)
-    df <- NA_to_0(df = df_modo, cols = cols)
+    df_sin_na <- NA_to_0(df = df_modo, cols = cols)
     
     # WORKFLOW PASO 2. FILTRO DE EXPRESION MINIMA
-    df_f <- min_exprs_filt(df = df_modo, seq = seq, filtro = filtro, ext = ext)
-    n1 <- nrow(df_modo)
+    df_exprs_min <- min_exprs_filt(df = df_sin_na, seq = seq, filtro = filtro, ext = ext)
+    n1 <- nrow(df_exprs_min)
     
     # WORKFLOW PASO 3. CONVERTIR A TPM.
     if (ext == "TPM"){
-        df_f <- TPM(df = df_f, cols = cols)
+        df_exprs_min <- TPM(df = df_exprs_min, cols = cols)
     }
     # WORKFLOW PASO 4. MEDIA RÉPLICAS BIOLÓGICAS + MEDIAS TEÓRICAS
     
-    df_f <- bio_replicate_mean(df_f = df_f, cols = cols, seq = seq) 
-    
+    df_bio_repl_mean <- bio_replicate_mean(df_modo = df_exprs_min, name = name, cols = cols, seq = seq) 
+
     # Anotar
-    df_f <- anotar(df_f = df_f, modo = modo, combi = combi, extension = extension)
+    df_anotado <- anotar(df_f = df_bio_repl_mean, df_modo = df_exprs_min, modo = modo, combi = combi, extension = extension)
+
     # WORKFLOW PASO 5. FILTRADO DE ISOFORMAS
     
-    df_f <- isoforms_filt(df = df_f, seq = seq)
-    n2 <- nrow(df_f)
+    df_isoformas_filtradas <- isoforms_filt(df = df_anotado, seq = seq)
+    n2 <- nrow(df_isoformas_filtradas)
     
     # WORKFLOW PASO 6. Log10 + pseudocount
-    log10_pseudocount <- function(df, seq)
+    df_f <- log10_pseudocount(df = df_isoformas_filtradas, seq = seq)
     
     return(list(df=df_f, n0=n0, n1=n1, n2=n2))
 }

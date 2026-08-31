@@ -22,8 +22,11 @@ done
 
 # Ejecutar en paralelo con 8 núcleos y guardar salida CSV
 HEADER="modo_medida,filtro,tipo_de_seqs,tipo_de_plataformas,tipo_de_modos,comparacion,r_cuadrado,num_isoformas_sin_filtro,num_isoformas_filtro_expresion,num_isoformas_filtro_isoformas"
-echo "$HEADER" > resultados_globales.csv
 
-cat "$PARAM_FILE" | parallel --colsep ' ' -j 10 Rscript paralelizado_dotplot_individual.r {1} {2} {3} {4} {5} >> resultados_globales.csv
+path=/home/adrian/Documentos/Conesa_Lab/VSCODE/Long_reads_data_analysis/output
+
+echo "$HEADER" > $path/resultados_globales.csv
+
+cat "$PARAM_FILE" | parallel --colsep ' ' -j 10 Rscript paralelizado_dotplot_individual.r {1} {2} {3} {4} {5} >> $path/resultados_globales.csv
 
 rm "$PARAM_FILE"
