@@ -16,30 +16,6 @@ label_10_pow <- function(x) {
     parse(text = paste0("10^", x))
 }
 
-# Transformar a TPM
-TPM <- function(df, cols){
-    cols <- unlist(cols, use.names = FALSE)
-    
-    # division por filas. NO SE USA EN LONG READS   
-    # df <- df_normal[,cols] / df_normal[,"length"] Esto ya no hace falta pq en logn read no hay sesgo por longitud de lectura, PERO ONT SÍ TIENE
-    # suma de columas
-    a <- colSums(df[, cols], na.rm = TRUE) / 1000000
-    a[a == 0] <- 1  # Evitar división por cero
-    
-    df[, cols] <- sweep(df[, cols], 2, a, FUN = "/")
-    return(df)
-}
-
-# cambiar NA a 0
-NA_to_0 <- function(df, cols){
-    cols <- unlist(cols, use.names = FALSE)
-    
-    
-    df[, cols][is.na(df[, cols])] <- 0
-    
-    return(df)
-}
-
 # obtiene las columnas segun tipo de plataforma de secuenciacion
 cols_sel <- function(seq){
     if (seq == "masseq"){
@@ -60,18 +36,22 @@ cols_sel <- function(seq){
     }
 }
 
-
-
+# WORKFLOW PASO 1. LIMPIEZA DE NA
+NA_to_0 <- function(df, cols){
+    cols <- unlist(cols, use.names = FALSE)
+    
+    
+    df[, cols][is.na(df[, cols])] <- 0
+    
+    return(df)
+}
+# WORKFLOW PASO 2. FILTRO DE EXPRESION MINIMA
 min_exprs_filt <- function(df, seq, filtro = 2, ext){
     
     if (!(filtro %in% c(0,1,2,3) )) { filtro <- 2}
     
     cols <- cols_sel(seq= seq)
-    df <- NA_to_0(df, cols)
     
-    if (ext == "TPM"){
-        df <- TPM(df, cols)
-    }
     
     if (filtro != 0) { # Filtro = 0 no filtering
         if (filtro %in% c(1,2)){
@@ -110,7 +90,65 @@ min_exprs_filt <- function(df, seq, filtro = 2, ext){
     return(df)
 }
 
+# WORKFLOW PASO 3. CONVERTIR A TPM.
+TPM <- function(df, cols){
+    cols <- unlist(cols, use.names = FALSE)
+    
+    # division por filas. NO SE USA EN LONG READS   
+    # df <- df_normal[,cols] / df_normal[,"length"] Esto ya no hace falta pq en logn read no hay sesgo por longitud de lectura, PERO ONT SÍ TIENE
+    # suma de columas
+    a <- colSums(df[, cols], na.rm = TRUE) / 1000000
+    a[a == 0] <- 1  # Evitar división por cero
+    
+    df[, cols] <- sweep(df[, cols], 2, a, FUN = "/")
+    return(df)
+}
+# WORKFLOW PASO 4. MEDIA RÉPLICAS BIOLÓGICAS + MEDIAS TEÓRICAS
+bio_replicate_mean <- function(df_f, cols, seq) {
+    
+    df_f <- data.frame(
+        tr_id = df_modo[, name],
+        K100  = rowMeans(df_modo[, cols$cols1]),
+        B100  = rowMeans(df_modo[, cols$cols2]),
+        B20   = rowMeans(df_modo[, cols$cols3])
+    ) 
+    
+    df_f["B20_ex"] <- df_f[, "B100"] * 0.2 + df_f[, "K100"] * 0.8
+    
+    if (seq != "masseq"){ # Añadir condicion B80
+        
+        df_f["B80"] <- rowMeans(df_modo[, cols$cols4])
+        df_f["B80_ex"] <- df_f[, "B100"] * 0.8 + df_f[, "K100"] * 0.2
+        
+    }
+    
+    return(df_f)
+    
+}
 
+anotar <- function(df_f, modo, combi, extension) {
+    # Añadir columna transcrito asociado y cateogria estructural 
+    if (modo == "raw"){
+        file_qc <- file.path(ruta, paste0("default_", combi, extension))  
+        df_qc <- read.table(file_qc, sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL)
+        
+        # Unir data frames 
+        df_f <- df_f %>%
+            left_join(
+                df_qc %>% select(isoform, associated_transcript, structural_category),
+                by = c("tr_id" = "isoform")
+            )
+    }
+    else {
+        df_f["associated_transcript"] <- df_modo[, "associated_transcript"]
+        df_f["structural_category"]   <- df_modo[, "structural_category"] }
+    
+    return(df_f)
+}
+
+
+
+# WORKFLOW PASO 5. FILTRADO DE ISOFORMAS
 isoforms_filt <- function(df, seq) {
     
     if (seq == "masseq"){ cols_exp <- c("K100", "B100", "B20", "B20_ex") }
@@ -123,12 +161,24 @@ isoforms_filt <- function(df, seq) {
         df[, "associated_transcript"] != "novel" &
             df[, "structural_category"] == "full-splice_match" ) , ]
     
-    # Transformación logarítmica base 10 con pseudocont 0.01
-    df_filtered[, cols_exp] <- log10(df_filtered[cols_exp] + 0.01)
+    
     
     return(df_filtered)
 }
-
+# WORKFLOW PASO 6. Log10 + pseudocount
+log10_pseudocount <- function(df, seq){
+    
+    if (seq == "masseq"){ cols_exp <- c("K100", "B100", "B20", "B20_ex") }
+    
+    else { cols_exp <- c("K100", "B100", "B20", "B80", "B20_ex", "B80_ex") }
+    
+    # Transformación logarítmica base 10 con pseudocont 0.01
+    df[, cols_exp] <- log10(df[cols_exp] + 0.01)
+    
+    return(df)
+    
+    
+}
 
 
 
@@ -152,49 +202,31 @@ procesar_datos <- function(modo, seq, plataforma, ruta, filtro, ext) {
     #df_modo <- read.table(file_data, sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL)
     n0 <- nrow(df_modo)
     
-    # Limpieza reads
-    df_modo <- min_exprs_filt(df_modo, seq, filtro, ext)
+    # WORKFLOW PASO 1. LIMPIEZA DE NA
+    cols <- cols_sel(seq = seq)
+    df <- NA_to_0(df = df_modo, cols = cols)
+    
+    # WORKFLOW PASO 2. FILTRO DE EXPRESION MINIMA
+    df_f <- min_exprs_filt(df = df_modo, seq = seq, filtro = filtro, ext = ext)
     n1 <- nrow(df_modo)
     
-    cols <- cols_sel(seq=seq)
-    
-    # Aplicar la media y mezclas teoricas
-    
-    df_f <- data.frame(
-        tr_id = df_modo[, name],
-        K100  = rowMeans(df_modo[, cols$cols1]),
-        B100  = rowMeans(df_modo[, cols$cols2]),
-        B20   = rowMeans(df_modo[, cols$cols3])
-    ) 
-    
-    df_f["B20_ex"] <- df_f[, "B100"] * 0.2 + df_f[, "K100"] * 0.8
-    
-    if (seq != "masseq"){ # Añadir condicion B80
-        
-        df_f["B80"] <- rowMeans(df_modo[, cols$cols4])
-        df_f["B80_ex"] <- df_f[, "B100"] * 0.8 + df_f[, "K100"] * 0.2
-        
+    # WORKFLOW PASO 3. CONVERTIR A TPM.
+    if (ext == "TPM"){
+        df_f <- TPM(df = df_f, cols = cols)
     }
-    # Añadir columna transcrito asociado y cateogria estructural 
-    if (modo == "raw"){
-        file_qc <- file.path(ruta, paste0("default_", combi, extension))  
-        df_qc <- read.table(file_qc, sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL)
-        
-        # Unir data frames 
-        df_f <- df_f %>%
-            left_join(
-                df_qc %>% select(isoform, associated_transcript, structural_category),
-                by = c("tr_id" = "isoform")
-            )
-    }
-    else {
-        df_f["associated_transcript"] <- df_modo[, "associated_transcript"]
-        df_f["structural_category"]   <- df_modo[, "structural_category"] }
+    # WORKFLOW PASO 4. MEDIA RÉPLICAS BIOLÓGICAS + MEDIAS TEÓRICAS
     
-    # Llamar a funcion para limpiar datos
+    df_f <- bio_replicate_mean(df_f = df_f, cols = cols, seq = seq) 
     
-    df_f <- isoforms_filt(df_f, seq)
+    # Anotar
+    df_f <- anotar(df_f = df_f, modo = modo, combi = combi, extension = extension)
+    # WORKFLOW PASO 5. FILTRADO DE ISOFORMAS
+    
+    df_f <- isoforms_filt(df = df_f, seq = seq)
     n2 <- nrow(df_f)
+    
+    # WORKFLOW PASO 6. Log10 + pseudocount
+    log10_pseudocount <- function(df, seq)
     
     return(list(df=df_f, n0=n0, n1=n1, n2=n2))
 }
