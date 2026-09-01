@@ -45,6 +45,21 @@ NA_to_0 <- function(df, cols){
     
     return(df)
 }
+# calculo del valor de m según el número de réplicas
+m_value <- function(M, epsilon = 0.05, alpha = 0.01){
+    
+    all_possible_m <- 1:M
+    
+    probabilities <- pbinom(all_possible_m - 1, size = M, prob = epsilon, lower.tail = F)
+    
+    valid_m <- all_possible_m[ probabilities <= alpha ]
+    
+    if (length(valid_m) == 0){ m <- M} else { m <- min(valid_m) }
+    
+    return(m)
+    
+    
+}
 # WORKFLOW PASO 2. FILTRO DE EXPRESION MINIMA
 min_exprs_filt <- function(df, seq, filtro = 2, ext){
     
@@ -59,7 +74,7 @@ min_exprs_filt <- function(df, seq, filtro = 2, ext){
             if (filtro == 1) { n <- 1; m <- 1 }
             
             # Filter: At least n reads per m samples per condition
-            else if (filtro == 2) { n <- 1; m <- 2}
+            else if (filtro == 2) { n <- 1; m <- m_value(M = length(cols$cols1))}
             
             # Both filters imply expresion in at least one of the two predictor conditions
             df <-df[which(
