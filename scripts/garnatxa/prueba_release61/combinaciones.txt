@@ -1,0 +1,13 @@
+isoseq isocall
+isoseq isoseq
+isoseq bambu
+isoseq flair
+isoseq isoquant
+masseq isocall
+masseq isoseq
+masseq bambu
+masseq flair
+masseq isoquant
+ont bambu
+ont flair
+ont isoquant
