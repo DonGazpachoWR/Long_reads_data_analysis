@@ -96,7 +96,8 @@ p <- ggplot(largo, aes(y = panel, colour = modo, group = modo)) +
          subtitle = paste("0 = datos filtrados (fl) de cada modo. Punto y barra: rescue (rq) con su intervalo bootstrap del 95%.",
                           "Banda clara: 95% de las reasignaciones al azar dentro del gen", sep = "\n"),
          x = NULL, y = NULL, colour = NULL) +
-    tema
+    scale_x_continuous(n.breaks = 5) +
+    tema + theme(panel.spacing.x = unit(1.5, "lines"))
 ggsave("comparacion_modos_TPM.png", p, path = dir_test, width = 12, height = 11, bg = "white")
 
 print(as.data.frame(recuento), row.names = FALSE)
