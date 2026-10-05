@@ -14,8 +14,10 @@
 #         JSON cleaned in rescue before filtering the reference
 #   PR 3: evidence check of the reintroduced reference transcripts
 #
-# Same inputs and filter as the kb2 run: count >= 1 in at least 2 replicates of
-# K OR of B, now written as OR rules on prevalence_K / prevalence_B.
+# Same inputs and filter as the kb2 run: expressed in at least 2 replicates of
+# K OR of B, now written as OR rules on prevalence_K / prevalence_B. Expression
+# uses the default --min_expression of QC (0: count > 0, so the fractional counts
+# of bambu are kept; kb2 used count >= 1).
 # Each step is skipped if its output already exists, so a relaunch resumes
 # (delete the step directory to repeat it).
 # At the end, regression against kb2 (filter) and evidence_kb2 (rescue).
@@ -96,6 +98,7 @@ for col in min_intron_length prevalence prevalence_K prevalence_B; do
   echo "$header" | tr '\t' '\n' | grep -qx "$col" || { echo "ERROR: falta la columna $col en QC" >&2; exit 1; }
 done
 echo "    columnas min_intron_length, prevalence, prevalence_K, prevalence_B presentes"
+echo "    $(grep MinExpression "$qc_dir/default_${combi}.qc_params.txt")"
 
 # --- Filter (PR 2: prevalence through the generic rules) ---
 filter_class=$filter_dir/rules_default_${combi}_RulesFilter_classification.txt
@@ -158,5 +161,17 @@ fi
 for f in rescue_table.tsv rescue_inclusion_list.tsv reassigned_counts.tsv; do
   cmp_sorted "$f (vs evidence_kb2)" "$old_rq/rq_${combi}_$f" "$rq_dir/rq_${combi}_$f"
 done
+
+# Previous r61 run with count >= 1 (moved to resultados_ge1 before relaunching bambu)
+prev=$BASE/resultados_ge1/$combi
+if [ -d "$prev" ]; then
+  echo ">>> Comparación con la ejecución r61 anterior (count >= 1)"
+  cmp_sorted "filter_result (vs r61 >= 1)" \
+    <(cut_cols "$prev/filter/rules_default_${combi}_RulesFilter_classification.txt") <(cut_cols "$filter_class")
+  awk -F'\t' 'FNR==1{for(i=1;i<=NF;i++) if($i=="filter_result") c=i; next}
+               {n[(FILENAME==ARGV[1] ? "antes" : "ahora") " " $c]++}
+               END{for(k in n) print "    " k, n[k]}' \
+    "$prev/filter/rules_default_${combi}_RulesFilter_classification.txt" "$filter_class" | sort
+fi
 
 echo "=== $combi terminado ==="

@@ -30,7 +30,9 @@ source(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value
 combis <- c(paste0("isoseq_", c("isocall", "isoseq", "bambu", "flair", "isoquant")),
             paste0("masseq_", c("isocall", "isoseq", "bambu", "flair", "isoquant")),
             paste0("ont_", c("bambu", "flair", "isoquant")))
-MIN_DETECTION <- 1      # MIN_DETECTION_COUNT of SQANTI3
+MIN_EXPRESSION <- 0     # --min_expression de SQANTI3 QC
+# Misma regla que is_expressed() de SQANTI3: con 0, count > 0; si no, count >= MIN_EXPRESSION
+expresado <- function(x) if (MIN_EXPRESSION == 0) x > 0 else x >= MIN_EXPRESSION
 UMBRAL_GRUPO  <- 2      # prevalence_K >= 2 OR prevalence_B >= 2 (filter_r61.json)
 
 leer <- function(...) {
@@ -76,7 +78,7 @@ verificar <- function(combi) {
     # Isoforms missing from --fl_count have NA counts and NA prevalence
     sin_conteos <- rowSums(!is.na(qc[, muestras])) == 0
     q <- qc[!sin_conteos, muestras]; q[is.na(q)] <- 0
-    det <- q >= MIN_DETECTION
+    det <- expresado(q)
     con <- qc[!sin_conteos, ]
     prev_ok <- all(is.na(qc$prevalence[sin_conteos])) &&
         all(is.na(qc$prevalence_K[sin_conteos])) && all(is.na(qc$prevalence_B[sin_conteos])) &&
@@ -107,8 +109,8 @@ verificar <- function(combi) {
     m_art <- as.matrix(fl[match(pares$artifact, fl$isoform), c(rep$K, rep$B)])
     m_art[is.na(m_art)] <- 0
     agg <- rowsum(m_art * pares$share, pares$assigned_transcript)
-    pasa_rec <- rowSums(agg[, rep$K, drop = FALSE] >= MIN_DETECTION) >= UMBRAL_GRUPO |
-        rowSums(agg[, rep$B, drop = FALSE] >= MIN_DETECTION) >= UMBRAL_GRUPO
+    pasa_rec <- rowSums(expresado(agg[, rep$K, drop = FALSE])) >= UMBRAL_GRUPO |
+        rowSums(expresado(agg[, rep$B, drop = FALSE])) >= UMBRAL_GRUPO
     estado <- ev %>% distinct(assigned_transcript, evidence_check)
     pasa_sq <- estado$evidence_check[match(rownames(agg), estado$assigned_transcript)] == "pass"
     n_dif_ev <- sum(pasa_rec != pasa_sq)
