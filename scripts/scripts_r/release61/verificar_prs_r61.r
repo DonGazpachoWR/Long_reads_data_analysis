@@ -10,7 +10,8 @@
 #   PR 2  prevalence, prevalence_K, prevalence_B written by QC equal the values
 #         recomputed from the per-sample counts; filter_result equals kb2.
 #   PR 3  evidence_check of every reference target equals the one recomputed
-#         independently from the artifacts' counts (OR of >= 2 samples in K or B).
+#         independently: counts of the artifacts distributed as requantification
+#         does (requant_r61.r), OR of >= 2 samples in K or B.
 #
 # Usage: Rscript verificar_prs_r61.r <DATA_R61> <DATA_KB2> <OUT_DIR>
 
@@ -24,8 +25,9 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly = TRUE)
 ruta_r61 <- args[1]; ruta_kb2 <- args[2]; outdir <- args[3]
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-source(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE))),
-                 "tema_release61.r"))
+dir_script <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
+source(file.path(dir_script, "tema_release61.r"))
+source(file.path(dir_script, "requant_r61.r"))
 
 combis <- c(paste0("isoseq_", c("isocall", "isoseq", "bambu", "flair", "isoquant")),
             paste0("masseq_", c("isocall", "isoseq", "bambu", "flair", "isoquant")),
@@ -103,12 +105,14 @@ verificar <- function(combi) {
     }
 
     # ---------------------------------------------------------------- PR 3
+    # Rows of the rescue table before the check (the reassigned ones are added by it),
+    # requantified with every target as rescue does
+    antes <- tabla[tabla$evidence_check != "reassigned", ]
+    m_counts <- cargar_counts(ruta_r61, combi, muestras)
+    d <- preparar_requant(m_counts, fl, antes, unique(antes$assigned_transcript))
+    final <- requantificar(d)
     ev <- tabla %>% filter(origin == "reference", evidence_check %in% c("pass", "failed"))
-    pares <- ev %>% distinct(artifact, assigned_transcript) %>%
-        group_by(artifact) %>% mutate(share = 1 / n()) %>% ungroup()
-    m_art <- as.matrix(fl[match(pares$artifact, fl$isoform), c(rep$K, rep$B)])
-    m_art[is.na(m_art)] <- 0
-    agg <- rowsum(m_art * pares$share, pares$assigned_transcript)
+    agg <- final[unique(ev$assigned_transcript), c(rep$K, rep$B), drop = FALSE]
     pasa_rec <- rowSums(expresado(agg[, rep$K, drop = FALSE])) >= UMBRAL_GRUPO |
         rowSums(expresado(agg[, rep$B, drop = FALSE])) >= UMBRAL_GRUPO
     estado <- ev %>% distinct(assigned_transcript, evidence_check)
@@ -130,6 +134,7 @@ verificar <- function(combi) {
             pr2_isoformas_cumplen_regla = prev_filtro_ok,
             pr2_isoformas_isoform = sum(fl_isoform),
             pr2_diferencias_filter_vs_kb2 = n_dif_kb2,
+            pr2_counts_fraccionarios = d$fraccional,
             pr3_targets_referencia = nrow(agg),
             pr3_targets_pasan = sum(pasa_sq),
             pr3_diferencias_recalculo = n_dif_ev,
@@ -156,7 +161,8 @@ print(as.data.frame(tabla), row.names = FALSE)
 checks_logicos <- c("pr1_intron_na_solo_monoexonicas", "pr1_requant_conserva_conteos",
                     "pr2_prevalencias_correctas", "pr2_isoformas_cumplen_regla")
 fallos <- sum(!as.matrix(tabla[, checks_logicos])) +
-    sum(tabla$pr2_diferencias_filter_vs_kb2 != 0, na.rm = TRUE) +
+    # kb2 used count >= 1: it can only coincide with count > 0 for integer counts
+    sum(tabla$pr2_diferencias_filter_vs_kb2 != 0 & !tabla$pr2_counts_fraccionarios, na.rm = TRUE) +
     sum(tabla$pr3_diferencias_recalculo != 0)
 cat(sprintf("\nCombinaciones verificadas: %d de %d. Comprobaciones fallidas: %d\n",
             nrow(tabla), length(combis), fallos))

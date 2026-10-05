@@ -11,7 +11,7 @@ Benchmark de transcriptomas de long reads (isoseq, masseq, ont) con mezclas de t
 | `output/` | Gráficas y tablas generadas (no versionado). |
 | `workflows/` | Scripts maestros que descargan de Garnatxa y lanzan los análisis en local. `master_workflow_r61.sh` es el de las pull requests de release 6.1. |
 | `docs/` | Documentación: `contexto/` (contexto de cada PR), `diagramas/` (flujo del rescue con control de evidencia), `referencias/` (diseño de SIRVs), `resultados_sueltos/` (CSV y salidas de análisis antiguos). |
-| `scripts/garnatxa/` | Scripts de Slurm para Garnatxa: `isocall/`, `SQ/`, `tama/` (antiguos) y `prueba_release61/` (prueba de las PRs de release 6.1). |
+| `scripts/garnatxa/` | Scripts de Slurm para Garnatxa: `isocall/`, `SQ/`, `tama/` (antiguos) y `prueba_release61/` (prueba de las PRs de release 6.1; `MODO=sinprev` repite filtro y rescue sin las reglas de prevalencia). |
 | `scripts/lanzadores/` | Lanzadores locales de los análisis de filtro de réplicas (`lanzar_*.sh`). |
 | `scripts/scripts_r/release61/` | Scripts nuevos para las pull requests de mi repositorio (DonGazpachoWR/SQANTI3, rama `release-6.1`). |
 | `scripts/scripts_r/antiguo/` | Scripts anteriores, clasificados por categoría. |
@@ -22,6 +22,8 @@ Benchmark de transcriptomas de long reads (isoseq, masseq, ont) con mezclas de t
 - `correlacion_mezclas_individual.r`: cálculo de una combinación, fase y ejecución (lo llama el anterior).
 - `stats_r2_fases.r`, `stats_delta_fases.r`: evolución por fase y comparación entre ejecuciones.
 - `verificar_prs_r61.r`: comprobaciones de cada PR sobre los datos reales (min_intron_length, requantificación, prevalencias de QC, filtro frente a kb2 y control de evidencia recalculado).
+- `test_reasignacion_azar_r61.r`: ¿mejora la reasignación del rescue las mezclas? (1) Test de aleatorización: reproduce la requantificación con las asignaciones reales y con B reasignaciones al azar (dentro del gen del target o en todo el transcriptoma). (2) Bootstrap de genes de rq frente a los datos filtrados (fl). p-valores empíricos con ajuste BH. Se ejecuta por separado para la ejecución con prevalencia y sin prevalencia.
+- `requant_r61.r`: requantificación de SQANTI3 rescue reproducida en R y evaluación de las mezclas (la usan el test y la verificación del control de evidencia).
 - `tema_release61.r`: colores y tema comunes.
 
 ### `scripts/scripts_r/antiguo/`

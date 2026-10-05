@@ -21,6 +21,10 @@
 # Each step is skipped if its output already exists, so a relaunch resumes
 # (delete the step directory to repeat it).
 # At the end, regression against kb2 (filter) and evidence_kb2 (rescue).
+#
+# MODO=sinprev (sbatch --export=ALL,MODO=sinprev): same pipeline and code with the
+# filter rules without prevalence (filter_r61_sinprev.json), in resultados_sinprev.
+# QC is shared with the prevalence run; no evidence check (no count requisites).
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
@@ -30,7 +34,12 @@ conda activate sqanti_conda
 
 BASE=/home/adrianbe/practicas/prueba_release61
 SQ=$BASE/sqanti
-JSON=$BASE/filter_r61.json
+MODO=${MODO:-prevalencia}
+case "$MODO" in
+  prevalencia) JSON=$BASE/filter_r61.json;         RES=$BASE/resultados ;;
+  sinprev)     JSON=$BASE/filter_r61_sinprev.json; RES=$BASE/resultados_sinprev ;;
+  *) echo "ERROR: MODO desconocido: $MODO (prevalencia | sinprev)" >&2; exit 1 ;;
+esac
 params=$BASE/combinaciones.txt
 fasta=/storage/gge/home_members/adrianbe/practicas/intento1/genoma_raton.fa
 gtf=/storage/gge/home_members/adrianbe/practicas/intento1/copia_limpio_anotacion_raton.gtf
@@ -45,15 +54,15 @@ fi
 combi=${seq}_${plataforma}
 path=$path_referencia/$seq/$plataforma
 counts=$path/counts_${combi}.tsv
-out=$BASE/resultados/$combi
-qc_dir=$out/qc
+out=$RES/$combi
+qc_dir=$BASE/resultados/$combi/qc   # QC shared by both modes
 filter_dir=$out/filter
 rq_dir=$out/rescue
 old_filter=$path/sqanti/filter/rules_kb2
 old_rq=$path/sqanti/rq/evidence_kb2
 mkdir -p "$qc_dir" "$filter_dir" "$rq_dir"
 
-echo "=== Tarea $SLURM_ARRAY_TASK_ID: $combi ==="
+echo "=== Tarea $SLURM_ARRAY_TASK_ID: $combi (modo $MODO) ==="
 echo "SQANTI3: $(cat "$SQ/COMMIT")"
 [ -f "$ref_class" ] || { echo "ERROR: falta el QC de referencia ($ref_class)" >&2; exit 1; }
 
@@ -143,11 +152,19 @@ echo "    JSON de referencia: $(tr -d ' \n' < "$rq_dir/reference_rules_filter/re
 awk -F'\t' 'NR==1{for(i=1;i<=NF;i++) if($i=="evidence_check") c=i; next} c{n[$c]++}
             END{for(k in n) print "    evidence_check", k, n[k]}' "$rq_dir/rq_${combi}_rescue_table.tsv"
 
+if [ "$MODO" != "prevalencia" ]; then
+  echo "=== $combi terminado ==="
+  exit 0
+fi
+
 echo ">>> Regresión"
-cmp_sorted() {   # $1 etiqueta, $2 antiguo, $3 nuevo
-  if [ ! -e "$2" ]; then echo "SIN_REFERENCIA  $1"
-  elif cmp -s <(sort "$2") <(sort "$3"); then echo "IDENTICO  $1"
-  else echo "DISTINTO  $1 ($(diff <(sort "$2") <(sort "$3") | grep -c '^[<>]') líneas)"; fi
+cmp_sorted() {   # $1 etiqueta, $2 antiguo, $3 nuevo (pueden ser sustituciones de proceso: se leen una vez)
+  if [ ! -e "$2" ]; then echo "SIN_REFERENCIA  $1"; return; fi
+  local a b; a=$(mktemp); b=$(mktemp)
+  sort "$2" > "$a"; sort "$3" > "$b"
+  if cmp -s "$a" "$b"; then echo "IDENTICO  $1"
+  else echo "DISTINTO  $1 ($(diff "$a" "$b" | grep -c '^[<>]') líneas)"; fi
+  rm -f "$a" "$b"
 }
 cut_cols() {     # isoform y filter_result de una classification
   awk -F'\t' 'NR==1{for(i=1;i<=NF;i++){if($i=="isoform")a=i; if($i=="filter_result")b=i}; next}{print $a"\t"$b}' "$1"
